@@ -145,7 +145,7 @@ def communicate_with_server(host, port, password):
         elif choice == '2':
             file_path = input("Enter the file path to send: ")
             if os.path.isfile(file_path):
-                send_message(host, port, file_path, password)
+                send_file(host, port, file_path, password)
             else:
                 print("File not found!")
         elif choice == '3':
@@ -156,6 +156,32 @@ def communicate_with_server(host, port, password):
             exit()
         else:
             print("Invalid choice. Please try again.")
+
+# Send a file to a server
+def send_file(host, port, file_path, password):
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    
+    try:
+        client_socket.connect((host, port))
+        
+        # Send the file name first
+        file_name = os.path.basename(file_path)
+        encrypted_name = encrypt_data(f"FILE{file_name}".encode(), generate_key(password))
+        client_socket.send(encrypted_name)
+        
+        # Read the file content and send it in chunks
+        with open(file_path, 'rb') as file:
+            file_data = file.read(1024)
+            while file_data:
+                encrypted_file_data = encrypt_data(file_data, generate_key(password))
+                client_socket.send(encrypted_file_data)
+                file_data = file.read(1024)
+        
+        print(f"File '{file_name}' sent successfully.")
+    except Exception as e:
+        print(f"Error sending file: {e}")
+    finally:
+        client_socket.close()
 
 # Client-side code to connect to a server by IP
 def select_server_and_communicate():
