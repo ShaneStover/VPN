@@ -41,6 +41,12 @@ def decrypt_file(encrypted_data, key, output_file_path):
     with open(output_file_path, 'wb') as file:
         file.write(decrypted_data)  # Save decrypted data as binary
 
+# Check if a file is an image
+def is_image(file_path):
+    image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp']
+    _, ext = os.path.splitext(file_path)
+    return ext.lower() in image_extensions
+
 # Handle client communication on the server
 def handle_client(client_socket, password):
     try:
@@ -73,10 +79,12 @@ def handle_client(client_socket, password):
             
             # Check if the response is a file path
             if os.path.isfile(response):
-                # Encrypt and send the file
-                encrypted_file = encrypt_file(response, key)
-                client_socket.send(encrypted_file)
-                print(f"File '{response}' sent.")
+                if is_image(response):
+                    # If it's an image, don't encrypt it
+                    send_file(client_socket, response, password, encrypt=False)
+                else:
+                    # Encrypt and send the file
+                    send_file(client_socket, response, password, encrypt=True)
             else:
                 # Encrypt and send the text message
                 encrypted_response = encrypt_data(response.encode(), key)
@@ -145,7 +153,11 @@ def communicate_with_server(host, port, password):
         elif choice == '2':
             file_path = input("Enter the file path to send: ")
             if os.path.isfile(file_path):
-                send_file(host, port, file_path, password)
+                if is_image(file_path):
+                    # If it's an image, don't encrypt it
+                    send_file(host, port, file_path, password, encrypt=False)
+                else:
+                    send_file(host, port, file_path, password, encrypt=True)
             else:
                 print("File not found!")
         elif choice == '3':
@@ -158,31 +170,20 @@ def communicate_with_server(host, port, password):
             print("Invalid choice. Please try again.")
 
 # Send a file to a server
-def send_file(host, port, file_path, password):
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def send_file(client_socket, file_path, password, encrypt=True):
+    client_socket.send(f"FILE{os.path.basename(file_path)}".encode())
     
-    try:
-        client_socket.connect((host, port))
+    with open(file_path, 'rb') as file:
+        file_data = file.read()
         
-        # Send the file name first
-        file_name = os.path.basename(file_path)
-        encrypted_name = encrypt_data(f"FILE{file_name}".encode(), generate_key(password))
-        client_socket.send(encrypted_name)
+        # If encryption is needed, encrypt the file
+        if encrypt:
+            key = generate_key(password)
+            file_data = encrypt_data(file_data, key)
         
-        # Read the file content and send it in chunks
-        with open(file_path, 'rb') as file:
-            while True:
-                file_data = file.read(1024)
-                if not file_data:
-                    break
-                encrypted_file_data = encrypt_data(file_data, generate_key(password))
-                client_socket.send(encrypted_file_data)
-        
-        print(f"File '{file_name}' sent successfully.")
-    except Exception as e:
-        print(f"Error sending file: {e}")
-    finally:
-        client_socket.close()
+        # Send the file data in chunks
+        client_socket.send(file_data)
+        print(f"File '{file_path}' sent successfully.")
 
 # Client-side code to connect to a server by IP
 def select_server_and_communicate():
