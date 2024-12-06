@@ -171,11 +171,12 @@ def send_file(host, port, file_path, password):
         
         # Read the file content and send it in chunks
         with open(file_path, 'rb') as file:
-            file_data = file.read(1024)
-            while file_data:
+            while True:
+                file_data = file.read(1024)
+                if not file_data:
+                    break
                 encrypted_file_data = encrypt_data(file_data, generate_key(password))
                 client_socket.send(encrypted_file_data)
-                file_data = file.read(1024)
         
         print(f"File '{file_name}' sent successfully.")
     except Exception as e:
