@@ -28,23 +28,52 @@ def decrypt_data(encrypted_data, key):
     decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
     return decrypted_data.decode()
 
+# Encrypt a file
+def encrypt_file(file_path, key):
+    with open(file_path, 'rb') as file:
+        file_data = file.read()
+    encrypted_data = encrypt_data(file_data.decode(errors='ignore'), key)  # Ignore any encoding errors
+    return encrypted_data
+
+# Decrypt a file
+def decrypt_file(encrypted_data, key, output_file_path):
+    decrypted_data = decrypt_data(encrypted_data, key)
+    with open(output_file_path, 'wb') as file:
+        file.write(decrypted_data.encode())  # Save decrypted data as binary
+
 # Handle client communication on the server
 def handle_client(client_socket, password):
     try:
-        # Receive the encrypted message or file
-        encrypted_data = client_socket.recv(1024)
-        
-        # Decrypt the message
-        key = generate_key(password)
-        decrypted_message = decrypt_data(encrypted_data, key)
-        
-        # Process the message (print it out)
-        print(f"Received: {decrypted_message}")
-        
-        # Send a response back to the client
-        response = "Message received and decrypted successfully!"
-        encrypted_response = encrypt_data(response, key)
-        client_socket.send(encrypted_response)
+        while True:
+            encrypted_data = client_socket.recv(1024)
+            if not encrypted_data:
+                break  # If no data is received, disconnect
+            
+            # Decrypt the message
+            key = generate_key(password)
+            decrypted_message = decrypt_data(encrypted_data, key)
+
+            # Process the message (print it out)
+            print(f"Received: {decrypted_message}")
+
+            # Ask the server to reply or send a file
+            response = input("Enter a response or file path to send back (or type 'exit' to disconnect): ")
+            if response.lower() == 'exit':
+                print("Disconnecting...")
+                break
+            
+            # Check if the response is a file path
+            if os.path.isfile(response):
+                # Encrypt and send the file
+                encrypted_file = encrypt_file(response, key)
+                client_socket.send(encrypted_file)
+                print(f"File '{response}' sent.")
+            else:
+                # Encrypt and send the text message
+                encrypted_response = encrypt_data(response, key)
+                client_socket.send(encrypted_response)
+                print(f"Message sent: {response}")
+
     except Exception as e:
         print(f"Error: {e}")
     finally:
@@ -84,6 +113,7 @@ def send_message(host, port, message, password):
         encrypted_response = client_socket.recv(1024)
         decrypted_response = decrypt_data(encrypted_response, key)
         print(f"Response from server: {decrypted_response}")
+
     except Exception as e:
         print(f"Error: {e}")
     finally:
@@ -94,18 +124,25 @@ def communicate_with_server(host, port, password):
     while True:
         print("\nOptions:")
         print("1. Send a message")
-        print("2. Back to server selection")
-        print("3. Exit")
+        print("2. Send a file")
+        print("3. Back to server selection")
+        print("4. Exit")
 
-        choice = input("Choose an option (1/2/3): ")
+        choice = input("Choose an option (1/2/3/4): ")
 
         if choice == '1':
             message = input("Enter the message to send: ")
             send_message(host, port, message, password)
         elif choice == '2':
+            file_path = input("Enter the file path to send: ")
+            if os.path.isfile(file_path):
+                send_message(host, port, file_path, password)
+            else:
+                print("File not found!")
+        elif choice == '3':
             print("Disconnecting from server.")
             break
-        elif choice == '3':
+        elif choice == '4':
             print("Exiting client.")
             exit()
         else:
