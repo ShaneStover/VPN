@@ -123,42 +123,17 @@ def communicate_with_server(host, port, password):
 # Client-side code to choose a server and communicate with clients
 def select_server_and_communicate():
     while True:
-        print("\nAvailable Servers:")
-        if not connected_clients:
-            print("No servers available at the moment.")
-            break
-        for idx, (server_ip, clients) in enumerate(connected_clients.items()):
-            print(f"SERVER#{idx + 1} - IP: {server_ip}")
-            print("CONNECTED CLIENTS:")
-            for client_hash in clients:
-                print(f"- {client_hash}")
-        
-        selected_server_idx = input("\nSelect a server by number (or type |EXIT| to exit): ")
-        
-        if selected_server_idx.lower() == '|exit|':
-            print("Exiting.")
-            break
-        
-        try:
-            selected_server_idx = int(selected_server_idx) - 1
-            server_ip = list(connected_clients.keys())[selected_server_idx]
-            print(f"Selected server: {server_ip}")
-            
-            # Ask for a client hash
-            client_hash = input("Enter client cryptographic hash to communicate with: ")
+        print("\nEnter the server's IP address to connect:")
+        server_ip = input("Server IP (or press Enter for localhost): ")
+        if not server_ip:
+            server_ip = "127.0.0.1"  # Default to localhost
 
-            # Check if the client exists in the selected server
-            if client_hash not in connected_clients[server_ip]:
-                print("Client not found. Please try again.")
-                continue
-            
-            # Now, communicate with the selected server
-            print(f"Connecting to {server_ip}...")
-            password = input("Enter the password for key generation: ")
-            communicate_with_server(server_ip, 5001, password)
+        port = 5001  # The port where the server is listening
+        password = input("Enter the password for key generation: ")
         
-        except (ValueError, IndexError):
-            print("Invalid server number. Please try again.")
+        # Attempt to communicate with the server
+        print(f"Attempting to connect to server at {server_ip}:{port}...")
+        communicate_with_server(server_ip, port, password)
 
 # Main Server and Client Entry Point
 def main():
