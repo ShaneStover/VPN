@@ -27,7 +27,7 @@ def decrypt_data(encrypted_data, key):
     cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
     decryptor = cipher.decryptor()
     decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
-    return decrypted_data.decode()
+    return decrypted_data
 
 # Server Code
 def start_server(host, port, password):
@@ -45,9 +45,18 @@ def start_server(host, port, password):
         
         # Decrypt the data
         key = generate_key(password)
-        decrypted_message = decrypt_data(data, key)
+        decrypted_data = decrypt_data(data, key)
         
-        print(f"Decrypted message: {decrypted_message}")
+        # Check if the decrypted data is text or file
+        try:
+            # Try to decode as a text message
+            decrypted_message = decrypted_data.decode()
+            print(f"Decrypted message: {decrypted_message}")
+        except UnicodeDecodeError:
+            # If it fails to decode, assume it's a file and save it
+            print("Received file data. Saving to 'received_file'")
+            with open("received_file", "wb") as file:
+                file.write(decrypted_data)
         
         client_socket.close()
 
