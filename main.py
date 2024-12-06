@@ -3,6 +3,10 @@ import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import hashlib
+import threading
+
+# Global dictionary to keep track of connected clients per server
+connected_clients = {}
 
 # Encryption and Decryption Functions
 
@@ -28,7 +32,7 @@ def decrypt_data(encrypted_data, key):
     return decrypted_data.decode()
 
 # Handle client communication on the server
-def handle_client(client_socket, password):
+def handle_client(client_socket, address, password, server_ip):
     try:
         # Receive the encrypted message or file
         encrypted_data = client_socket.recv(1024)
@@ -37,8 +41,14 @@ def handle_client(client_socket, password):
         key = generate_key(password)
         decrypted_message = decrypt_data(encrypted_data, key)
         
+        # Add client to the list of connected clients for the server
+        client_hash = hashlib.sha256(decrypted_message.encode()).hexdigest()
+        if server_ip not in connected_clients:
+            connected_clients[server_ip] = []
+        connected_clients[server_ip].append(client_hash)
+
         # Process the message (print it out)
-        print(f"Received: {decrypted_message}")
+        print(f"Received from {client_hash}: {decrypted_message}")
         
         # Send a response back to the client
         response = "Message received and decrypted successfully!"
@@ -61,8 +71,8 @@ def start_server(host, port, password):
         client_socket, client_address = server_socket.accept()
         print(f"Connection established with {client_address}")
         
-        # Handle the client request
-        handle_client(client_socket, password)
+        # Handle the client request in a separate thread
+        threading.Thread(target=handle_client, args=(client_socket, client_address, password, host)).start()
 
 # Send a message to a specific server (or peer)
 def send_message(host, port, message, password):
@@ -88,47 +98,12 @@ def send_message(host, port, message, password):
     finally:
         client_socket.close()
 
-# Send a file to a specific server (or peer)
-def send_file(host, port, password):
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    
-    file_path = input("Enter the full file path to send: ")
-    if not os.path.isfile(file_path):
-        print("Invalid file path. Please try again.")
-        return
-
-    print(f"Connecting to {host}:{port}")
-    try:
-        client_socket.connect((host, port))
-        
-        # Read and encrypt the file
-        key = generate_key(password)
-        with open(file_path, 'rb') as file:
-            file_data = file.read()
-        encrypted_file_data = encrypt_data(file_data.decode(), key)
-        
-        client_socket.send(encrypted_file_data)
-        print(f"File {file_path} sent.")
-        
-        # Receive server response (if any)
-        encrypted_response = client_socket.recv(1024)
-        decrypted_response = decrypt_data(encrypted_response, key)
-        print(f"Response from server: {decrypted_response}")
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        client_socket.close()
-
-# Main Client Loop
-def start_client():
-    host = input("Enter the server IP address: ")  # Input the IP address of the server
-    port = 5001  # Use the same port as the server
-    password = input("Enter the password for key generation: ")
-
+# Client-side communication with server
+def communicate_with_server(host, port, password):
     while True:
         print("\nOptions:")
         print("1. Send a message")
-        print("2. Send a file")
+        print("2. Back to server list")
         print("3. Exit")
 
         choice = input("Choose an option (1/2/3): ")
@@ -137,12 +112,50 @@ def start_client():
             message = input("Enter the message to send: ")
             send_message(host, port, message, password)
         elif choice == '2':
-            send_file(host, port, password)
+            print("Disconnecting from server.")
+            break
         elif choice == '3':
             print("Exiting client.")
-            break
+            exit()
         else:
             print("Invalid choice. Please try again.")
+
+# Client-side code to choose a server and communicate with clients
+def select_server_and_communicate():
+    while True:
+        print("\nAvailable Servers:")
+        for idx, (server_ip, clients) in enumerate(connected_clients.items()):
+            print(f"SERVER#{idx + 1} - IP: {server_ip}")
+            print("CONNECTED CLIENTS:")
+            for client_hash in clients:
+                print(f"- {client_hash}")
+        
+        selected_server_idx = input("\nSelect a server by number (or type |EXIT| to exit): ")
+        
+        if selected_server_idx.lower() == '|exit|':
+            print("Exiting.")
+            break
+        
+        try:
+            selected_server_idx = int(selected_server_idx) - 1
+            server_ip = list(connected_clients.keys())[selected_server_idx]
+            print(f"Selected server: {server_ip}")
+            
+            # Ask for a client hash
+            client_hash = input("Enter client cryptographic hash to communicate with: ")
+
+            # Check if the client exists in the selected server
+            if client_hash not in connected_clients[server_ip]:
+                print("Client not found. Please try again.")
+                continue
+            
+            # Now, communicate with the selected server
+            print(f"Connecting to {server_ip}...")
+            password = input("Enter the password for key generation: ")
+            communicate_with_server(server_ip, 5001, password)
+        
+        except (ValueError, IndexError):
+            print("Invalid server number. Please try again.")
 
 # Main Server and Client Entry Point
 def main():
@@ -155,7 +168,7 @@ def main():
         start_server(host, port, password)
     
     elif role == 'client':
-        start_client()
+        select_server_and_communicate()
     
     else:
         print("Invalid role. Please enter either 'server' or 'client'.")
