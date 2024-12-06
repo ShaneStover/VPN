@@ -124,6 +124,9 @@ def communicate_with_server(host, port, password):
 def select_server_and_communicate():
     while True:
         print("\nAvailable Servers:")
+        if not connected_clients:
+            print("No servers available at the moment.")
+            break
         for idx, (server_ip, clients) in enumerate(connected_clients.items()):
             print(f"SERVER#{idx + 1} - IP: {server_ip}")
             print("CONNECTED CLIENTS:")
