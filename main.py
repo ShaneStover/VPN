@@ -1,13 +1,9 @@
-#s
 import socket
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import hashlib
 import threading
-
-# Global dictionary to keep track of connected clients per server
-connected_clients = {}
 
 # Encryption and Decryption Functions
 
@@ -33,7 +29,7 @@ def decrypt_data(encrypted_data, key):
     return decrypted_data.decode()
 
 # Handle client communication on the server
-def handle_client(client_socket, address, password, server_ip):
+def handle_client(client_socket, password):
     try:
         # Receive the encrypted message or file
         encrypted_data = client_socket.recv(1024)
@@ -42,14 +38,8 @@ def handle_client(client_socket, address, password, server_ip):
         key = generate_key(password)
         decrypted_message = decrypt_data(encrypted_data, key)
         
-        # Add client to the list of connected clients for the server
-        client_hash = hashlib.sha256(decrypted_message.encode()).hexdigest()
-        if server_ip not in connected_clients:
-            connected_clients[server_ip] = []
-        connected_clients[server_ip].append(client_hash)
-
         # Process the message (print it out)
-        print(f"Received from {client_hash}: {decrypted_message}")
+        print(f"Received: {decrypted_message}")
         
         # Send a response back to the client
         response = "Message received and decrypted successfully!"
@@ -73,7 +63,7 @@ def start_server(host, port, password):
         print(f"Connection established with {client_address}")
         
         # Handle the client request in a separate thread
-        threading.Thread(target=handle_client, args=(client_socket, client_address, password, host)).start()
+        threading.Thread(target=handle_client, args=(client_socket, password)).start()
 
 # Send a message to a specific server (or peer)
 def send_message(host, port, message, password):
@@ -104,7 +94,7 @@ def communicate_with_server(host, port, password):
     while True:
         print("\nOptions:")
         print("1. Send a message")
-        print("2. Back to server list")
+        print("2. Back to server selection")
         print("3. Exit")
 
         choice = input("Choose an option (1/2/3): ")
@@ -121,7 +111,7 @@ def communicate_with_server(host, port, password):
         else:
             print("Invalid choice. Please try again.")
 
-# Client-side code to choose a server and communicate with clients
+# Client-side code to connect to a server by IP
 def select_server_and_communicate():
     while True:
         print("\nEnter the server's IP address to connect:")
