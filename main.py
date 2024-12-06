@@ -1,53 +1,40 @@
 import socket
 import os
-import hashlib
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+import hashlib
 
-# Function to generate a key based on the password
+# Encryption and Decryption Functions
+
+# Generate a secure key from the password using SHA-256
 def generate_key(password):
-    # Create a key from the password using SHA-256 hashing
+    # Use SHA-256 to hash the password and generate a key
     return hashlib.sha256(password.encode()).digest()
 
-# Encrypt the data using AES
+# Encrypt the message or file content using AES
 def encrypt_data(data, key):
-    iv = os.urandom(16)  # Random initialization vector
+    iv = os.urandom(16)  # Generate a random Initialization Vector (IV)
     cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
     encryptor = cipher.encryptor()
     encrypted_data = encryptor.update(data.encode()) + encryptor.finalize()
-    return iv + encrypted_data  # Prepend IV to the encrypted data
+    return iv + encrypted_data  # Prepend IV for decryption
 
-# Decrypt the data using AES
+# Decrypt the message or file content using AES
 def decrypt_data(encrypted_data, key):
-    iv = encrypted_data[:16]  # Extract the IV from the encrypted data
+    iv = encrypted_data[:16]  # Extract the IV from the beginning
     encrypted_data = encrypted_data[16:]
     cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
     decryptor = cipher.decryptor()
     decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
     return decrypted_data.decode()
 
-# Encrypt a file
-def encrypt_file(file_path, key):
-    with open(file_path, 'rb') as file:
-        file_data = file.read()
-    encrypted_data = encrypt_data(file_data.decode(), key)  # Convert binary to string for encryption
-    with open(file_path + ".enc", 'wb') as file:
-        file.write(encrypted_data)
-
-# Decrypt a file
-def decrypt_file(file_path, key):
-    with open(file_path, 'rb') as file:
-        encrypted_data = file.read()
-    decrypted_data = decrypt_data(encrypted_data, key)
-    with open(file_path.replace(".enc", ".dec"), 'wb') as file:
-        file.write(decrypted_data.encode())  # Save decrypted data as bytes
-
-# Server code to receive files and messages
+# Server Code
 def start_server(host, port, password):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
     server_socket.listen(5)
-    print(f"Server started on {host}:{port}")
+    print(f"Server is running and listening on {host}:{port}")
     
     while True:
         client_socket, client_address = server_socket.accept()
@@ -64,53 +51,70 @@ def start_server(host, port, password):
         
         client_socket.close()
 
-# Client code to send files and messages
+# Client Code
 def send_message(host, port, message, password):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((host, port))
     
-    # Encrypt the message
-    key = generate_key(password)
-    encrypted_message = encrypt_data(message, key)
-    
-    client_socket.send(encrypted_message)
-    print("Message sent.")
-    
-    client_socket.close()
+    print(f"Connecting to {host}:{port}")  # Debugging line
+    try:
+        client_socket.connect((host, port))
+        
+        # Encrypt the message
+        key = generate_key(password)
+        encrypted_message = encrypt_data(message, key)
+        
+        client_socket.send(encrypted_message)
+        print("Message sent.")
+    except ConnectionRefusedError:
+        print("Connection refused. Ensure the server is running and the correct port is being used.")
+    finally:
+        client_socket.close()
 
-# File transfer function
-def send_file(host, port, file_path, password):
+# Client File Transfer Code (Optional)
+def send_file(host, port, password):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((host, port))
     
-    # Read and encrypt the file
-    key = generate_key(password)
-    with open(file_path, 'rb') as file:
-        file_data = file.read()
-    encrypted_file_data = encrypt_data(file_data.decode(), key)  # Convert binary to string for encryption
-    
-    client_socket.send(encrypted_file_data)
-    print(f"File {file_path} sent.")
-    
-    client_socket.close()
+    file_path = input("Enter the full file path to send: ")
+    if not os.path.isfile(file_path):
+        print("Invalid file path. Please try again.")
+        return
 
-# Main function to start server or client
+    print(f"Connecting to {host}:{port}")
+    try:
+        client_socket.connect((host, port))
+        
+        # Read and encrypt the file
+        key = generate_key(password)
+        with open(file_path, 'rb') as file:
+            file_data = file.read()
+        encrypted_file_data = encrypt_data(file_data.decode(), key)
+        
+        client_socket.send(encrypted_file_data)
+        print(f"File {file_path} sent.")
+    except ConnectionRefusedError:
+        print("Connection refused. Ensure the server is running and the correct port is being used.")
+    finally:
+        client_socket.close()
+
+# Main function to start the server or client
 def main():
-    mode = input("Enter 'server' to run the server or 'client' to run the client: ").strip().lower()
+    action = input("Enter 'server' to run the server or 'client' to run the client: ").lower()
 
-    if mode == 'server':
-        host = '127.0.0.1'
-        port = 1923
+    if action == "server":
+        host = input("Enter the server IP address (or press Enter for localhost): ") or '0.0.0.0'  # '0.0.0.0' will allow all devices on the local network
+        port = 5001  # Use a port number that is free
         password = input("Enter a password for key generation: ")
         start_server(host, port, password)
-    elif mode == 'client':
-        host = '127.0.0.1'
-        port = 1293
-        message = input("Enter a message to send: ")
-        password = input("Enter a password for key generation: ")
+    
+    elif action == "client":
+        host = input("Enter the server IP address: ")  # Input the IP address of the server
+        port = 5001  # Use the same port as the server
+        message = input("Enter the message to send: ")
+        password = input("Enter the password for key generation: ")
         send_message(host, port, message, password)
+    
     else:
-        print("Invalid input! Please enter 'server' or 'client'.")
+        print("Invalid choice. Please enter either 'server' or 'client'.")
 
 if __name__ == "__main__":
     main()
