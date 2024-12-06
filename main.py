@@ -16,7 +16,7 @@ def encrypt_data(data, key):
     iv = os.urandom(16)  # Generate a random Initialization Vector (IV)
     cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
     encryptor = cipher.encryptor()
-    encrypted_data = encryptor.update(data.encode()) + encryptor.finalize()
+    encrypted_data = encryptor.update(data) + encryptor.finalize()
     return iv + encrypted_data  # Prepend IV for decryption
 
 # Decrypt the message or file content using AES
@@ -26,20 +26,20 @@ def decrypt_data(encrypted_data, key):
     cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
     decryptor = cipher.decryptor()
     decrypted_data = decryptor.update(encrypted_data) + decryptor.finalize()
-    return decrypted_data.decode()
+    return decrypted_data
 
 # Encrypt a file
 def encrypt_file(file_path, key):
     with open(file_path, 'rb') as file:
         file_data = file.read()
-    encrypted_data = encrypt_data(file_data.decode(errors='ignore'), key)  # Ignore any encoding errors
+    encrypted_data = encrypt_data(file_data, key)
     return encrypted_data
 
 # Decrypt a file
 def decrypt_file(encrypted_data, key, output_file_path):
     decrypted_data = decrypt_data(encrypted_data, key)
     with open(output_file_path, 'wb') as file:
-        file.write(decrypted_data.encode())  # Save decrypted data as binary
+        file.write(decrypted_data)  # Save decrypted data as binary
 
 # Handle client communication on the server
 def handle_client(client_socket, password):
@@ -49,12 +49,21 @@ def handle_client(client_socket, password):
             if not encrypted_data:
                 break  # If no data is received, disconnect
             
-            # Decrypt the message
+            # Decrypt the message or file
             key = generate_key(password)
             decrypted_message = decrypt_data(encrypted_data, key)
 
-            # Process the message (print it out)
-            print(f"Received: {decrypted_message}")
+            # Process the message or file (print it out for messages, save for files)
+            if decrypted_message[:4] == b'FILE':
+                # This indicates the received data is a file
+                file_name = decrypted_message[4:].decode()  # Extract the file name from message
+                with open(file_name, 'wb') as f:
+                    file_data = client_socket.recv(1024)
+                    f.write(file_data)
+                print(f"Received file: {file_name}")
+            else:
+                # Normal message
+                print(f"Received message: {decrypted_message.decode()}")
 
             # Ask the server to reply or send a file
             response = input("Enter a response or file path to send back (or type 'exit' to disconnect): ")
@@ -70,7 +79,7 @@ def handle_client(client_socket, password):
                 print(f"File '{response}' sent.")
             else:
                 # Encrypt and send the text message
-                encrypted_response = encrypt_data(response, key)
+                encrypted_response = encrypt_data(response.encode(), key)
                 client_socket.send(encrypted_response)
                 print(f"Message sent: {response}")
 
@@ -85,7 +94,7 @@ def start_server(host, port, password):
     server_socket.bind((host, port))
     server_socket.listen(5)
     
-    print(f"Server is running and listening on {host}:{port}")
+    print(f"\nServer is running and listening on {host}:{port}\n")
     
     while True:
         client_socket, client_address = server_socket.accept()
@@ -98,13 +107,13 @@ def start_server(host, port, password):
 def send_message(host, port, message, password):
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     
-    print(f"Connecting to {host}:{port}")
+    print(f"\nConnecting to {host}:{port}...\n")
     try:
         client_socket.connect((host, port))
         
         # Encrypt the message
         key = generate_key(password)
-        encrypted_message = encrypt_data(message, key)
+        encrypted_message = encrypt_data(message.encode(), key)
         
         client_socket.send(encrypted_message)
         print("Message sent.")
@@ -112,7 +121,7 @@ def send_message(host, port, message, password):
         # Receive server response (if any)
         encrypted_response = client_socket.recv(1024)
         decrypted_response = decrypt_data(encrypted_response, key)
-        print(f"Response from server: {decrypted_response}")
+        print(f"Response from server: {decrypted_response.decode()}")
 
     except Exception as e:
         print(f"Error: {e}")
@@ -160,17 +169,17 @@ def select_server_and_communicate():
         password = input("Enter the password for key generation: ")
         
         # Attempt to communicate with the server
-        print(f"Attempting to connect to server at {server_ip}:{port}...")
+        print(f"Attempting to connect to server at {server_ip}:{port}...\n")
         communicate_with_server(server_ip, port, password)
 
 # Main Server and Client Entry Point
 def main():
-    role = input("Enter 'server' to run the server or 'client' to run the client: ").lower()
+    role = input("\nEnter 'server' to run the server or 'client' to run the client: ").lower()
     
     if role == 'server':
-        host = input("Enter the server IP address (or press Enter for localhost): ") or "127.0.0.1"
+        host = input("\nEnter the server IP address (or press Enter for localhost): ") or "127.0.0.1"
         port = 5001
-        password = input("Enter the password for key generation: ")
+        password = input("\nEnter the password for key generation: ")
         start_server(host, port, password)
     
     elif role == 'client':
